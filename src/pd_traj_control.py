@@ -7,22 +7,15 @@ import rospy
 from dynamic_reconfigure.server import Server
 from std_msgs.msg import Empty
 import baxter_interface
-from baxter_interface import CHECK_VERSION
 
 class JointController(object):
     """
-    Virtual Joint Springs class for torque control.
+    Virtual Joint Controller class for torque control.
 
     @param limb: limb on which to run joint springs example
     @param reconfig_server: dynamic reconfigure server
-
-    JointController class contains methods for the joint torque example allowing
-    moving the limb to a neutral location, entering torque mode, and attaching
-    virtual springs.
     """
     def __init__(self, limb):
-        
-
         # control parameters
         self._rate = 1000.0  # Hz
         self._missed_cmds = 20.0  # Missed cycles before triggering timeout
@@ -31,9 +24,11 @@ class JointController(object):
         self._limb = baxter_interface.Limb(limb)
 
         # initialize parameters
-        self._springs = dict()
-        self._damping = dict()
-        self._start_angles = dict()
+        self._kp = {'left_s0':10., 'left_s1':15., 'left_e0':5.,
+                         'left_e1':5., 'left_w0':3., 'left_w1':2., 'left_w2':1.5}
+        self._kd = {'left_s0':.1, 'left_s1':.1, 'left_e0':.1,
+                         'left_e1':.1, 'left_w0':.1, 'left_w1':.1, 'left_w2':.1}
+        self._des_pos = dict()
 
         # create cuff disable publisher
         cuff_ns = 'robot/limb/' + limb + '/suppress_cuff_interaction'
@@ -41,25 +36,11 @@ class JointController(object):
 
         # verify robot is enabled
         print("Getting robot state... ")
-        self._rs = baxter_interface.RobotEnable(CHECK_VERSION)
+        self._rs = baxter_interface.RobotEnable(True)
         self._init_state = self._rs.state().enabled
         print("Enabling robot... ")
         self._rs.enable()
         print("Running. Ctrl-c to quit")
-
-
-        # assign appropriate joint parameters to damping and springs values
-        default_spring = [10.0, 15.0, 5.0, 5.0, 3.0, 2.0, 1.5]
-        default_damping = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-
-        i = 0
-
-        for joint in self._limb.joint_names():
-            self._springs[joint] = default_spring[i]
-            self._damping[joint] = default_damping[i]
-            i = i+1
-
-
 
     def _update_forces(self):
         """
@@ -67,8 +48,6 @@ class JointController(object):
         and the current joint positions applying the joint torque spring forces
         as defined on the dynamic reconfigure server.
         """
-        
-
         # disable cuff interaction
         self._pub_cuff_disable.publish()
 
@@ -78,14 +57,12 @@ class JointController(object):
         cur_pos = self._limb.joint_angles()
         cur_vel = self._limb.joint_velocities()
         # calculate current forces
-        for joint in self._start_angles.keys():
+        for joint in self._des_pos.keys():
             # spring portion
-            cmd[joint] = self._springs[joint] * (self._start_angles[joint] -
+            cmd[joint] = self._kp[joint] * (self._des_pos[joint] -
                                                    cur_pos[joint])
             # damping portion
-            cmd[joint] -= self._damping[joint] * cur_vel[joint]
-
-        print(cmd)
+            cmd[joint] -= self._kd[joint] * cur_vel[joint]
 
         # command new joint torques
         self._limb.set_joint_torques(cmd)
@@ -96,13 +73,14 @@ class JointController(object):
         """
         self._limb.move_to_neutral()
 
-    def attach_springs(self):
+    def start_control(self):
         """
         Switches to joint torque mode and attached joint springs to current
         joint positions.
         """
+        print("starting control")
         # record initial joint angles
-        self._start_angles = self._limb.joint_angles()
+        self._des_pos = self._limb.joint_angles()
 
         # set control rate
         control_rate = rospy.Rate(self._rate)
@@ -141,13 +119,12 @@ def main():
     """
 
     print("Initializing node... ")
-    rospy.init_node("rsdk_joint_torque_springs_left")
-    
+    rospy.init_node("controls_final_left_arm")
 
-    js = JointController("left") # instatiation control object
-    rospy.on_shutdown(js.clean_shutdown)       # register shutdown callback
-    js.move_to_neutral()                       # start from neutral arm position
-    js.attach_springs()                        # turn on control law
+    jc = JointController("left",)           # instantiate control object
+    rospy.on_shutdown(jc.clean_shutdown)    # register shutdown callback
+    jc.move_to_neutral()                    # start from neutral arm position
+    jc.start_control()                      # turn on control law
 
 
 if __name__ == "__main__":
