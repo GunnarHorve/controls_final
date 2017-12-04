@@ -7,7 +7,6 @@ import rospy
 from dynamic_reconfigure.server import Server
 from std_msgs.msg import Empty
 import baxter_interface
-from baxter_examples.cfg import JointSpringsExampleConfig
 from baxter_interface import CHECK_VERSION
 
 class JointController(object):
@@ -21,8 +20,8 @@ class JointController(object):
     moving the limb to a neutral location, entering torque mode, and attaching
     virtual springs.
     """
-    def __init__(self, limb, reconfig_server):
-        self._dyn = reconfig_server
+    def __init__(self, limb):
+        
 
         # control parameters
         self._rate = 1000.0  # Hz
@@ -48,12 +47,19 @@ class JointController(object):
         self._rs.enable()
         print("Running. Ctrl-c to quit")
 
-    def _update_parameters(self):
+
+        # assign appropriate joint parameters to damping and springs values
+        default_spring = [10.0, 15.0, 5.0, 5.0, 3.0, 2.0, 1.5]
+        default_damping = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+        i = 0
+
         for joint in self._limb.joint_names():
-            self._springs[joint] = self._dyn.config[joint[-2:] +
-                                                    '_spring_stiffness']
-            self._damping[joint] = self._dyn.config[joint[-2:] +
-                                                    '_damping_coefficient']
+            self._springs[joint] = default_spring[i]
+            self._damping[joint] = default_damping[i]
+            i = i+1
+
+
 
     def _update_forces(self):
         """
@@ -61,8 +67,7 @@ class JointController(object):
         and the current joint positions applying the joint torque spring forces
         as defined on the dynamic reconfigure server.
         """
-        # get latest spring constants
-        self._update_parameters()
+        
 
         # disable cuff interaction
         self._pub_cuff_disable.publish()
@@ -137,10 +142,9 @@ def main():
 
     print("Initializing node... ")
     rospy.init_node("rsdk_joint_torque_springs_left")
-    dynamic_cfg_srv = Server(JointSpringsExampleConfig,
-                             lambda config, level: config)
+    
 
-    js = JointController("left", dynamic_cfg_srv) # instatiation control object
+    js = JointController("left") # instatiation control object
     rospy.on_shutdown(js.clean_shutdown)       # register shutdown callback
     js.move_to_neutral()                       # start from neutral arm position
     js.attach_springs()                        # turn on control law
