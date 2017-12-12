@@ -8,6 +8,10 @@ from dynamic_reconfigure.server import Server
 from std_msgs.msg import Empty
 import baxter_interface
 
+PosData = []
+VelData = []
+TorqueCmdData = []
+
 class JointController(object):
     """
     Virtual Joint Controller class for torque control.
@@ -42,6 +46,9 @@ class JointController(object):
         self._rs.enable()
         print("Running. Ctrl-c to quit")
 
+
+
+
     def _update_forces(self):
         """
         Calculates the current angular difference between the start position
@@ -56,6 +63,11 @@ class JointController(object):
         # record current angles/velocities
         cur_pos = self._limb.joint_angles()
         cur_vel = self._limb.joint_velocities()
+
+        
+
+        #split into the various joint items and have ther own pos/vel/cmd thing
+
         # calculate current forces
         for joint in self._des_pos.keys():
             # spring portion
@@ -64,8 +76,26 @@ class JointController(object):
             # damping portion
             cmd[joint] -= self._kd[joint] * cur_vel[joint]
 
-        # command new joint torques
+        # store the position, velocity, and torque comand data for this iteration
+        pos = []
+        vel = []
+        tor = []
+
+        for key in cmd:
+            pos.append(cur_pos[key])
+            vel.append(cur_vel[key])
+            tor.append(cmd[key])
+
+        PosData.append(pos)
+        VelData.append(vel)
+        TorqueCmdData.append(tor) 
+
+        print(PosData)       
+
+        #send torque command
         self._limb.set_joint_torques(cmd)
+
+
 
     def move_to_neutral(self):
         """
@@ -86,7 +116,7 @@ class JointController(object):
         control_rate = rospy.Rate(self._rate)
 
         # for safety purposes, set the control rate command timeout.
-        # if the specified number of command cycles are missed, the robot
+        # if the specified number of commandingd cycles are missed, the robot
         # will timeout and disable
         self._limb.set_command_timeout((1.0 / self._rate) * self._missed_cmds)
 
