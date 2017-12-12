@@ -11,7 +11,7 @@ Data = (np.array(Data[0]), np.array(Data[1]), np.array(Data[2]))
 
 # hard-coded, us-specific data
 legend  = ['left_s0', 'left_s1', 'left_e0', 'left_e1', 'left_w0', 'left_w1', 'left_w2']
-ylabels = ['position (rad)', 'velocity (rad/s)', 'torque (some torque unit)']
+ylabels = ['position (rad)', 'velocity (rad/s)', 'torque (N/m)']
 titles = ['Position vs. Time', 'Velocity vs Time', 'Torque vs. Time']
 joints = range(len(legend))
 joints = [6]
