@@ -7,10 +7,13 @@ import rospy
 from dynamic_reconfigure.server import Server
 from std_msgs.msg import Empty
 import baxter_interface
+import pickle
+
 
 PosData = []
 VelData = []
 TorqueCmdData = []
+time = [0.0]
 
 class JointController(object):
     """
@@ -89,12 +92,16 @@ class JointController(object):
         PosData.append(pos)
         VelData.append(vel)
         TorqueCmdData.append(tor) 
-
-        print(PosData)       
+        time.append(time[-1] + 1/self._rate)
 
         #send torque command
         self._limb.set_joint_torques(cmd)
 
+        if(len(PosData) > 10000):
+            del time[-1] # remove extra item in time
+            print("\n pickling............")
+            pickle.dump((PosData,VelData,TorqueCmdData, time),open('save.p','w'))
+            self.clean_shutdown()
 
 
     def move_to_neutral(self):
@@ -129,15 +136,18 @@ class JointController(object):
             self._update_forces()
             control_rate.sleep()
 
+
     def clean_shutdown(self):
         """
         Switches out of joint torque mode to exit cleanly
         """
+
         print("\nExiting...")
         self._limb.exit_control_mode()
         if not self._init_state and self._rs.state().enabled:
             print("Disabling robot...")
             self._rs.disable()
+        
 
 
 def main():
