@@ -4,6 +4,7 @@
 Baxter RSDK Joint Torque Example: joint springs
 """
 import rospy
+import math
 from dynamic_reconfigure.server import Server
 from std_msgs.msg import Empty
 import baxter_interface
@@ -14,13 +15,14 @@ PosData = []
 VelData = []
 TorqueCmdData = []
 time = [0.0]
+PosDesData = []
+VelDesData = []
 
 class JointController(object):
     """
     Virtual Joint Controller class for torque control.
 
     @param limb: limb on which to run joint springs example
-    @param reconfig_server: dynamic reconfigure server
     """
     def __init__(self, limb):
         # control parameters
@@ -35,7 +37,7 @@ class JointController(object):
                          'left_e1':5., 'left_w0':3., 'left_w1':2., 'left_w2':1.5}
         self._kd = {'left_s0':.1, 'left_s1':.1, 'left_e0':.1,
                          'left_e1':.1, 'left_w0':.1, 'left_w1':.1, 'left_w2':.1}
-        self._des_pos = dict()
+        self._start_pos = dict()
 
         # create cuff disable publisher
         cuff_ns = 'robot/limb/' + limb + '/suppress_cuff_interaction'
@@ -49,9 +51,6 @@ class JointController(object):
         self._rs.enable()
         print("Running. Ctrl-c to quit")
 
-
-
-
     def _update_forces(self):
         """
         Calculates the current angular difference between the start position
@@ -63,36 +62,47 @@ class JointController(object):
 
         # create our command dict
         cmd = dict()
+
+
         # record current angles/velocities
         cur_pos = self._limb.joint_angles()
         cur_vel = self._limb.joint_velocities()
 
-        
-
         #split into the various joint items and have ther own pos/vel/cmd thing
 
-        # calculate current forces
-        for joint in self._des_pos.keys():
-            # spring portion
-            cmd[joint] = self._kp[joint] * (self._des_pos[joint] -
-                                                   cur_pos[joint])
-            # damping portion
-            cmd[joint] -= self._kd[joint] * cur_vel[joint]
-
-        # store the position, velocity, and torque comand data for this iteration
+        # store stuff for plotting
         pos = []
         vel = []
         tor = []
+        posdes = []
+        veldes = []
 
-        for key in cmd:
-            pos.append(cur_pos[key])
-            vel.append(cur_vel[key])
-            tor.append(cmd[key])
+        # calculate current forces
+        for joint in self._start_pos.keys():
+            A = 0.1
+            w0 = math.pi/5
+
+            pos_des = self._start_pos[joint] + A*math.sin(w0*time[-1])
+            vel_des = A*w0*math.cos(w0*time[-1])
+
+            # spring portion
+            cmd[joint] = self._kp[joint] * (pos_des - cur_pos[joint])
+            # damping portion
+            cmd[joint] -= self._kd[joint] * (vel_des - cur_vel[joint])
+
+            pos.append(cur_pos[joint])
+            vel.append(cur_vel[joint])
+            tor.append(cmd[joint])
+            posdes.append(pos_des)
+            veldes.append(vel_des)
+        # store the position, velocity, and torque comand data for this iteration
 
         PosData.append(pos)
         VelData.append(vel)
         TorqueCmdData.append(tor) 
         time.append(time[-1] + 1/self._rate)
+        PosDesData.append(posdes)
+        VelDesData.append(veldes)
 
         #send torque command
         self._limb.set_joint_torques(cmd)
@@ -100,7 +110,8 @@ class JointController(object):
         if(len(PosData) > 10000):
             del time[-1] # remove extra item in time
             print("\n pickling............")
-            pickle.dump((PosData,VelData,TorqueCmdData, time),open('save.p','w'))
+            data = (PosData,VelData,TorqueCmdData, time, PosDesData, VelDesData)
+            pickle.dump(data,open('save.p','w'))
             self.clean_shutdown()
 
 
@@ -117,7 +128,7 @@ class JointController(object):
         """
         print("starting control")
         # record initial joint angles
-        self._des_pos = self._limb.joint_angles()
+        self._start_pos = self._limb.joint_angles()
 
         # set control rate
         control_rate = rospy.Rate(self._rate)
